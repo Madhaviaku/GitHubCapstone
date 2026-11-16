@@ -1,190 +1,58 @@
-# Implementation Plan for the Library Book Management Catalog
+# Implementation Plan: Multi-field Catalog Search
 
-## 1. Goal
+## Goal and scope
 
-Implement the approved architecture as a working library catalog system that supports CRUD operations, validation, pagination, search, error handling, and synchronized API documentation while staying aligned with the MVP scope.
+Implement the approved FR1.4 search enhancement: partial, case-insensitive matching across book title, author, genre, and ISBN. Keep `GET /api/books/search`, retain the published `title` query parameter as the generic search-term alias, and preserve the existing page/size behavior, required/non-blank search validation, response envelope, and paginated `data` shape. Update generated API documentation and prove it is synchronized.
 
----
+This plan is limited to search behavior and its directly related tests and documentation. It does not change CRUD behavior, the API response schema, validation rules for book fields, or introduce a new search subsystem or datastore.
 
-## 2. Delivery Order and Dependency Model
+## Preconditions and dependencies
 
-The work is grouped into dependency-ordered phases so the team can build the application without blocking on unrelated work.
+- `requirements.md` is approved; FR1.4 is the controlling requirement for this enhancement.
+- `architecture.md` Sections 4.2, 4.3, 4.5, 4.7, and 9 describe the approved contract and implementation boundaries.
+- `design-review.md` approves the architecture with conditions. It recommends retaining the existing `title` parameter as a generic search-term alias, but requires that compatibility choice to be explicitly confirmed before implementation. Its documentation-sync condition remains to be completed during implementation.
+- The plan is ready for the plan-approval gate. The approver must confirm the recommended `title` alias choice; do not start implementation until that decision and this plan are approved.
 
-### Phase 1: Project foundation
+## Ordered work items
 
-Tasks:
-- Confirm Java and Maven project setup
-- Configure Spring Boot dependencies and build lifecycle
-- Define the backend package structure and application entry point
-- Set up the project configuration for H2 and test execution
+| Order | Task | Requirement(s) | Dependencies | Likely files / components | Completion evidence |
+|---|---|---|---|---|---|
+| 1 | Lock the search contract and scope | FR1.4, FR2.2, FR3.1 | None | `requirements.md`, `architecture.md`, `design-review.md`, current `/api/books/search` contract | Obtain explicit approval to retain `title` as the required, non-blank generic search-term parameter (the architecture recommendation). Preserve current `page`/`size` defaults and constraints, response envelope, page shape, and existing error handling. Any proposed parameter or schema change returns to design review. |
+| 2 | Implement the repository multi-field predicate | FR1.4 | 1 | `src\main\java\com\library\catalog\repository\BookRepository.java` | Add a parameterized OR predicate for partial, case-insensitive title, author, genre, and ISBN matching. Return a `Page` with the predicate applied before pagination, consistent matching totals, and the existing created-date ordering. Repository-level tests cover each field and verify page content/totals. |
+| 3 | Update service search orchestration and retain validation | FR1.4, FR2.2, FR3.1 | 2 | `src\main\java\com\library\catalog\service\BookService.java` | Normalize the supplied search term and delegate to the new repository query. Keep blank/missing search-term and invalid pagination outcomes as client errors; do not move business/query rules into the controller or alter unrelated validation. Service tests cover trimming, blank input, and valid paginated searches. |
+| 4 | Verify the endpoint contract and search behavior | FR1.4, FR2.2, FR3.1 | 3 | `src\main\java\com\library\catalog\controller\BookController.java`, `src\test\java\com\library\catalog\BookControllerIntegrationTest.java` | Exercise partial and case-insensitive matches independently for title, author, genre, and ISBN; OR matching; no matches; required/blank query; invalid page/size; and pagination totals/page boundaries. Assert the existing `title`, `page`, and `size` parameters, HTTP status, response envelope, and paginated data shape remain unchanged. Keep controller logic thin. |
+| 5 | Update and regenerate search API documentation | FR4.1, FR4.3 | 1, 4 | `src\main\java\com\library\catalog\ApiDocumentationGenerator.java`, `docs\api.md` | Update generated endpoint text to explain partial, case-insensitive matching across all four fields while documenting `title` as the required generic search-term alias, current pagination defaults/constraints, response shape, and errors. Regenerate `docs\api.md` with `ApiDocumentationGenerator`; do not hand-edit generated output as the source of truth. |
+| 6 | Run documentation sync and full verification | FR1.4, FR2.2, FR3.1, FR4.2 | 2, 3, 4, 5 | `ApiDocumentationSyncVerifier`, Maven build, search tests | Run the Maven tests and build, including the documentation sync verifier. Confirm generated documentation matches `docs/api.md`, search test cases pass, and no existing tests or API contracts regress. Record command/output evidence for the verification report. |
+| 7 | Review and prepare release handoff | FR1.4, FR4 | 6 | Changed files, `code review.md`, `Final PR.md` | Review the diff against the approved contract and requirements; resolve or explicitly accept findings. Summarize changed files, verification evidence, and known limitations (including substring-search indexing/performance if relevant) for the PR/release handoff. |
 
-Dependencies:
-- No blockers; this is the starting point
+## Verification plan
 
-Blocked tasks:
-- None initially
+| Layer | Scenarios | Command / evidence |
+|---|---|---|
+| Repository / unit | Partial and case-insensitive matching for each of the four fields; OR semantics; no matches; correct page content, order, and filtered totals | Relevant repository/service tests, then `mvn test` |
+| Integration / API | Existing `title` parameter and pagination defaults; missing or blank term; invalid pagination; response envelope and page schema unchanged | `BookControllerIntegrationTest` and `mvn test` |
+| Documentation | Generator describes all-field search and the retained parameter; committed documentation equals generated content | `mvn compile exec:java -Dexec.mainClass=com.library.catalog.ApiDocumentationGenerator`, then run the verifier through `mvn verify` |
+| Regression / review | Existing CRUD, validation, and error handling remain unchanged; query is parameter-bound; diff stays within search scope | `mvn verify` plus code review against `requirements.md`, `architecture.md`, and `design-review.md` |
 
----
+## Risks and mitigations
 
-### Phase 2: Domain and persistence model
-
-Tasks:
-- Define the `Book` entity and required fields
-- Configure JPA repository methods for CRUD and title search
-- Add indexing and persistence rules for ISBN and search behavior
-- Validate the database mapping for required fields and constraints
-
-Dependencies:
-- Phase 1 must complete first
-
-Blocked tasks:
-- Service-layer implementation depends on the domain model being available
-- Controller endpoints depend on the repository design
-
----
-
-### Phase 3: Validation and request contract
-
-Tasks:
-- Create DTOs for create and update operations
-- Define validation rules for required fields, ISBN format, and quantity constraints
-- Standardize API response shape for success and error cases
-- Add exception classes for duplicates and missing records
-
-Dependencies:
-- Phase 2 must complete first
-
-Blocked tasks:
-- Controller implementation should not proceed until validation contracts are finalized
-- Service logic depends on these DTO and exception types
-
----
-
-### Phase 4: Service layer implementation
-
-Tasks:
-- Implement CRUD logic in the book service
-- Add ISBN normalization and uniqueness checks
-- Add pagination and title-based search logic
-- Enforce invalid quantity and required-field rules
-- Return consistent domain outcomes for success or error conditions
-
-Dependencies:
-- Phase 2 and Phase 3 must complete
-
-Blocked tasks:
-- Controller endpoints depend on service behavior being implemented
-- Integration tests depend on service behavior being stable
-
----
-
-### Phase 5: REST API controllers
-
-Tasks:
-- Expose endpoints for list, search, create, retrieve by ISBN, update, and delete
-- Connect controller methods to service-layer logic
-- Return standard HTTP status codes and payloads
-- Add centralized exception handling
-
-Dependencies:
-- Phase 4 must complete
-
-Blocked tasks:
-- Integration tests are blocked until the controller contract is implemented
-- Frontend integration depends on the API endpoints being live
-
----
-
-### Phase 6: API documentation and build contract
-
-Tasks:
-- Generate API documentation artifact for `/docs/api.md`
-- Add verification logic to ensure docs stay synchronized with the code
-- Add a build-time check that fails when generated docs drift from committed docs
-- Validate documentation completeness against the required endpoints
-
-Dependencies:
-- Phase 5 must complete so the final endpoint contracts are known
-
-Blocked tasks:
-- Final verification is blocked until documentation and build validation are in place
-
----
-
-### Phase 7: Testing and verification
-
-Tasks:
-- Add service-layer unit tests for validation and business rules
-- Add controller integration tests for HTTP creation, retrieval, search, and error handling
-- Run Maven verification to ensure build, tests, and docs all pass
-- Perform final quality review against the requirements
-
-Dependencies:
-- Phase 6 should be complete before final verification
-
-Blocked tasks:
-- Final approval is blocked until the verification suite passes cleanly
-
----
-
-## 3. Task Breakdown Summary
-
-| Priority | Task | Depends On | Status |
+| Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| 1 | Project foundation | None | Ready |
-| 2 | Domain and persistence model | Phase 1 | Ready |
-| 3 | Validation and request contract | Phase 2 | Ready |
-| 4 | Service layer implementation | Phases 2-3 | Ready |
-| 5 | REST API controllers | Phase 4 | Ready |
-| 6 | API documentation and build contract | Phase 5 | Ready |
-| 7 | Testing and verification | Phase 6 | Ready |
+| Legacy title-only wording elsewhere in the older requirements text conflicts with FR1.4 | Medium | Medium | Follow FR1.4 as identified by the design review and the updated approved architecture. If stakeholders dispute that baseline, pause for a requirements/design decision rather than silently reverting or expanding scope. |
+| OR matching or predicate placement produces incorrect page totals or duplicate-looking results | Low | Medium | Test matching across every field and assert that pagination and total counts are calculated over the combined predicate before paging. |
+| Leading-wildcard matching may not use ordinary B-tree indexes efficiently as the catalog grows | Medium | Low for MVP | Keep the approved simple repository implementation for the MVP; monitor query plans and revisit specialized indexing only if measured catalog scale warrants it. |
+| Generated docs drift from the endpoint contract | Medium | Medium | Update the generator, regenerate `docs/api.md`, and require the sync verifier/build to pass before review completion. |
 
----
+## Definition of done
 
-## 4. Blocked Tasks and Dependency Notes
+- [ ] FR1.4 behavior is implemented for partial, case-insensitive matching across title, author, genre, and ISBN.
+- [ ] Existing endpoint parameter compatibility, validation, pagination, response envelope, and paginated data shape are preserved.
+- [ ] Unit and API tests cover each searchable field, edge cases, and pagination totals.
+- [ ] `docs/api.md` is regenerated with `ApiDocumentationGenerator` and passes `ApiDocumentationSyncVerifier` through the Maven build.
+- [ ] Maven verification passes and evidence is recorded.
+- [ ] Code review findings are resolved or explicitly accepted; release/PR handoff includes changed files and known limitations.
 
-### Blocked-start tasks
+## Open questions and blockers
 
-The following tasks cannot start until their dependencies are complete:
-
-- Service layer implementation cannot begin until the domain model and DTO contracts exist.
-- Controller implementation cannot begin until service logic is implemented.
-- Documentation validation cannot begin until the controller contract is stable.
-- Final verification cannot begin until the documentation sync check is in place.
-
-### Parallelizable work
-
-Some tasks can proceed in parallel after established milestones:
-
-- Repository and DTO work can proceed independently once the domain model is defined.
-- Unit tests can be drafted alongside controller implementation after service logic is available.
-- Frontend integration work may begin once the REST API contract is stable.
-
----
-
-## 5. Execution Recommendation
-
-The safest execution sequence is:
-
-1. Foundation
-2. Domain and persistence model
-3. Validation and DTOs
-4. Service layer
-5. REST controllers
-6. Documentation sync
-7. Testing and verification
-
-This ordering minimizes rework and keeps the implementation aligned with the architecture and requirements.
-
----
-
-## 6. Completion Criteria
-
-The implementation is considered complete when all of the following are true:
-
-- CRUD operations work end-to-end
-- Validation rules are enforced consistently
-- Search and pagination work as expected
-- API docs are generated and fail the build on drift
-- Unit and integration tests pass
-- The final result matches the approved architecture and functional requirements
+- **Pre-implementation decision required:** confirm that the published `title` parameter remains the generic search-term alias, as recommended by the architecture. If not confirmed, return to design review before implementation.
+- **Approval gate:** implementation must wait for explicit approval of this plan. Reopen design review if implementation would rename the parameter, alter the response schema, or add a new search subsystem.

@@ -28,10 +28,12 @@ Library administrators manage a book catalog through a Spring Boot REST API.
 
 ## Workspace custom agents and skills
 
-This repository includes custom SDLC agents and a reusable skill workflow for the delivery pipeline:
+The `.github/` customizations are organized into:
 
-- `.github/agents/sdlc.agent.md` for the top-level orchestration workflow
-- `.github/agents/sdlc-step-01-requirements.agent.md` through `.github/agents/sdlc-step-08-pr.agent.md` for the phase-specific step agents
-- `.github/skills/sdlc/SKILL.md` for repeatable SDLC guidance and gate handling
+- `.github/agents/` — Jira-driven SDLC master and delegated phase agents
+- `.github/hooks/` — workspace lifecycle hooks and PowerShell scripts
+- `.github/instructions/sdlc.instructions.md` — phase-artifact guidance
+- `.github/skills/` — end-to-end SDLC, phase workflows, QA recovery, and conditional browser verification
+- `.github/templates/` — Jira assessment and phase artifact templates
 
-Use the custom agents for phase handoff and gate-driven execution. Keep the project aligned to the Library Book Management Catalog requirement baseline in `requirements.md` and do not drift to alternate product assumptions.
+Use the SDLC master to assess a Jira issue before entering the phase-gated workflow. Use the phase-specific skills and custom agents for handoff and gate-driven execution. Keep the project aligned to the Library Book Management Catalog requirement baseline in `requirements.md` and do not drift to alternate product assumptions.
