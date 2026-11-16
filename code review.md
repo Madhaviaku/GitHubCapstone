@@ -7,9 +7,10 @@ Question: Does each component behave as specified in requirements.md?
 
 Status: Mostly Pass with one design gap
 
-- The controller and service support the required CRUD flows for books, title search, validation, and Not Found handling.
+- The controller and service support the required CRUD flows for books, validation, and Not Found handling.
 - The API contract aligns with the requirements for create, read, update, and delete operations.
 - The library catalog logic normalizes ISBN values, prevents duplicate ISBNs, and enforces required field validation.
+- The enhanced search now supports partial, case-insensitive matching across title, author, genre, and ISBN while preserving the existing pagination and response envelope.
 - Observation: the update request model supports an optional `isbn` field, which allows changing the identifier during update. This conflicts with the requirement that ISBN cannot be changed after creation. This should be reviewed and either removed from the update payload or explicitly restricted by business rule.
 
 ### Security
@@ -39,8 +40,9 @@ Status: Good, with some gaps
 
 - Covered: successful create flow, duplicate ISBN rejection, missing book lookup, invalid quantity, and required-field validation.
 - Covered in integration tests: create success, Not Found for missing book, and validation failure for required fields.
-- Remaining gaps: search-by-title validation, blank search input, and duplicate update scenario are not explicitly covered.
-- Recommendation: add a few focused tests for invalid search input and update path edge cases to strengthen coverage.
+- Added coverage for broader search matching across title, author, genre, and ISBN.
+- Remaining gaps: blank search input and some edge-case branch coverage remain unverified because the Maven test command could not be executed in this environment.
+- Recommendation: run Maven verification in a working command-execution environment and add focused tests for invalid search input and update path edge cases if needed.
 
 ### Code Clarity
 Question: Are function names self-explanatory? Is logic easy to follow without comments?

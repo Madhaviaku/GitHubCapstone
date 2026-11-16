@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "pwsh -NoLogo -NoProfile -File .github/hooks/sdlc-session-start.ps1",
+        "windows": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File .github/hooks/sdlc-session-start.ps1",
+        "timeout": 10
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "pwsh -NoLogo -NoProfile -File .github/hooks/sdlc-prompt-check.ps1",
+        "windows": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File .github/hooks/sdlc-prompt-check.ps1",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "pwsh -NoLogo -NoProfile -File .github/hooks/sdlc-session-stop.ps1",
+        "windows": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File .github/hooks/sdlc-session-stop.ps1",
+        "timeout": 10
+      }
+    ]
+  }
+}

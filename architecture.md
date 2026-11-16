@@ -88,6 +88,8 @@ Endpoints:
 - DELETE /api/books/{isbn}
 - GET /api/books/search
 
+Search contract: accept one search term and the existing page/size parameters; treat the term as a partial, case-insensitive match over title, author, genre, and ISBN. Preserve the existing endpoint, response envelope (`code`, `message`, `timestamp`, optional `errors`), and paginated `data` shape. The current published request parameter is named `title`; retain it as a generic search-term alias for compatibility unless an explicit API change approves a rename. Document the chosen parameter name and all-field semantics in `/docs/api.md`.
+
 Design principle:
 
 - Controllers stay thin and focused on transport concerns
@@ -130,16 +132,18 @@ Recommended handling:
 Responsibilities:
 
 - Persist book entities to the database
-- Support CRUD and title-based searching
+- Support CRUD and partial, case-insensitive searching across title, author, genre, and ISBN
 - Optimize lookup by ISBN, title, author, and genre
 
 Recommended implementation:
 
 - Spring Data JPA repositories
-- Indexes on `isbn`, `title`, `author`, and `genre`
+- Parameterized substring matching on title, author, genre, and ISBN, combined with OR semantics and case-insensitive comparison
+- Apply the search predicate before pagination so page content and total counts describe the same matching set
 - Pagination support via `Pageable`
+- Retain indexes on ISBN and searchable fields for exact lookups; ordinary B-tree indexes may not accelerate leading-wildcard substring searches, so revisit query plans if catalog scale requires it
 
-This is the cleanest fit for a catalog system that needs both search and transactional updates.
+No new search service or datastore is required for the MVP. Keep the query in the repository and orchestration in `BookService`.
 
 ---
 
@@ -182,8 +186,8 @@ Responsibilities:
 
 Recommended implementation:
 
-- Springdoc OpenAPI or an equivalent annotation-driven doc generator
-- Maven plugin or build step to ensure `/docs/api.md` is generated and compared during `validate` or `verify`
+- The project `ApiDocumentationGenerator` produces `/docs/api.md`; update its search description and example together with the endpoint contract
+- `ApiDocumentationSyncVerifier` and the Maven build compare generated content with committed `/docs/api.md` and fail on drift
 - Build failure message clearly instructing developers to regenerate the docs before committing
 
 This directly satisfies FR4 and the enforced documentation requirement.
@@ -221,13 +225,13 @@ Recommended approach:
 
 ### Read/Search Flow
 
-1. User opens catalog page or searches by title
-2. React requests `/api/books` or `/api/books/search`
-3. Controller forwards request to the service layer
-4. Service applies pagination/search logic
-5. Repository executes optimized queries
-6. DTOs are returned and serialized to JSON
-7. UI renders paginated results
+1. User opens the catalog or submits a search term
+2. React requests `/api/books` or `/api/books/search` with the search term and pagination parameters
+3. Controller passes the request to `BookService` without implementing matching rules itself
+4. The service delegates the search and pagination to the repository
+5. The repository matches the term partially and case-insensitively against title, author, genre, or ISBN, then returns a `Page`
+6. The existing response envelope and paginated response shape are serialized unchanged
+7. UI renders the paginated results
 
 ### Documentation Sync Flow
 
@@ -304,8 +308,8 @@ This architecture satisfies the key constraints from the requirements document:
 - CRUD operations: handled by API controllers + service + repository layers
 - Validation: centralized in service and validation components
 - Pagination: repository/service support with `Pageable`
-- Search: repository query by title with case-insensitive matching
-- Auto-doc sync: OpenAPI + build-time validation component
+- Search: repository query matches partial terms case-insensitively across title, author, genre, and ISBN, with pagination applied to the combined result set
+- Auto-doc sync: `ApiDocumentationGenerator` produces `/docs/api.md`, and `ApiDocumentationSyncVerifier` enforces build-time consistency
 - Error handling: standardized API response model with exceptions mapped to HTTP status codes
 - Scalability: stateless backend architecture with database indexing and future horizontal scaling
 
@@ -313,7 +317,7 @@ This architecture satisfies the key constraints from the requirements document:
 
 ## 10. Design Review Outcome
 
-A structured design review identified the following priority items for architecture hardening before implementation:
+The architecture remains suitable for the requested multi-field search without a component redesign. Before implementation, align its search contract with FR1.4 and resolve the request-parameter compatibility decision described in Section 4.2. The following broader MVP guardrails remain:
 
 - Define the admin-only access assumption explicitly, even if auth is deferred beyond the MVP
 - Formalize the doc-generation contract so the Maven build fails only on true drift between `/docs/api.md` and the live API metadata

@@ -13,6 +13,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+
 @Service
 public class BookService {
 
@@ -40,18 +42,12 @@ public class BookService {
             throw new IllegalArgumentException("Request body is required");
         }
         String isbn = normalizeIsbn(request.isbn());
-        if (request.title() == null || request.title().isBlank()) {
-            throw new IllegalArgumentException("Title is required");
-        }
-        if (request.author() == null || request.author().isBlank()) {
-            throw new IllegalArgumentException("Author is required");
-        }
-        if (request.genre() == null || request.genre().isBlank()) {
-            throw new IllegalArgumentException("Genre is required");
-        }
-        if (request.quantityAvailable() != null && request.quantityAvailable() < 0) {
-            throw new IllegalArgumentException("Quantity must be non-negative");
-        }
+        validateText(request.title(), "Title", 200, true);
+        validateText(request.author(), "Author", 100, true);
+        validateText(request.genre(), "Genre", 50, true);
+        validateText(request.publisher(), "Publisher", 100, false);
+        validateQuantity(request.quantityAvailable());
+        validatePublicationDate(request.publicationDate());
         if (repository.existsByIsbn(isbn)) {
             throw new DuplicateIsbnException(isbn);
         }
@@ -77,18 +73,12 @@ public class BookService {
         Book existing = repository.findByIsbn(normalizedIsbn)
                 .orElseThrow(() -> new BookNotFoundException(normalizedIsbn));
 
-        if (request.title() != null && request.title().isBlank()) {
-            throw new IllegalArgumentException("Title cannot be blank");
-        }
-        if (request.author() != null && request.author().isBlank()) {
-            throw new IllegalArgumentException("Author cannot be blank");
-        }
-        if (request.genre() != null && request.genre().isBlank()) {
-            throw new IllegalArgumentException("Genre cannot be blank");
-        }
-        if (request.quantityAvailable() != null && request.quantityAvailable() < 0) {
-            throw new IllegalArgumentException("Quantity must be non-negative");
-        }
+        validateText(request.title(), "Title", 200, false);
+        validateText(request.author(), "Author", 100, false);
+        validateText(request.genre(), "Genre", 50, false);
+        validateText(request.publisher(), "Publisher", 100, false);
+        validateQuantity(request.quantityAvailable());
+        validatePublicationDate(request.publicationDate());
 
         if (request.title() != null) {
             existing.setTitle(request.title().trim());
@@ -108,14 +98,6 @@ public class BookService {
         if (request.quantityAvailable() != null) {
             existing.setQuantityAvailable(request.quantityAvailable());
         }
-        if (request.isbn() != null && !request.isbn().isBlank()) {
-            String replacementIsbn = normalizeIsbn(request.isbn());
-            if (!existing.getIsbn().equals(replacementIsbn) && repository.existsByIsbn(replacementIsbn)) {
-                throw new DuplicateIsbnException(replacementIsbn);
-            }
-            existing.setIsbn(replacementIsbn);
-        }
-
         return toResponse(repository.save(existing));
     }
 
@@ -131,19 +113,52 @@ public class BookService {
         if (title == null || title.isBlank()) {
             throw new IllegalArgumentException("Search title is required");
         }
+        String searchTerm = title.trim();
+        String normalizedIsbn = searchTerm.replace("-", "");
         Pageable pageable = PageRequest.of(page, size);
-        return repository.findByTitleContainingIgnoreCase(title.trim(), pageable).map(this::toResponse);
+        return repository.findByTitleContainingIgnoreCaseOrAuthorContainingIgnoreCaseOrGenreContainingIgnoreCaseOrIsbnContainingIgnoreCaseOrderByCreatedAtDesc(
+                        searchTerm,
+                        searchTerm,
+                        searchTerm,
+                        normalizedIsbn,
+                        pageable)
+                .map(this::toResponse);
     }
 
     public String normalizeIsbn(String isbn) {
         if (isbn == null || isbn.isBlank()) {
             throw new IllegalArgumentException("ISBN is required");
         }
-        String normalized = isbn.replace("-", "").trim();
-        if (!normalized.matches("\\d{10}|\\d{13}")) {
+        String formatted = isbn.trim();
+        if (!formatted.matches("(?:\\d-?){9}\\d|(?:\\d-?){12}\\d")) {
             throw new IllegalArgumentException("Invalid ISBN format");
         }
-        return normalized;
+        return formatted.replace("-", "");
+    }
+
+    private void validateText(String value, String field, int maxLength, boolean required) {
+        if (required && (value == null || value.isBlank())) {
+            throw new IllegalArgumentException(field + " is required");
+        }
+        if (value != null && value.length() > maxLength) {
+            throw new IllegalArgumentException(field + " length must not exceed " + maxLength + " characters");
+        }
+        if (!required && value != null && value.isBlank()
+                && !field.equals("Publisher")) {
+            throw new IllegalArgumentException(field + " cannot be blank");
+        }
+    }
+
+    private void validateQuantity(Integer quantity) {
+        if (quantity != null && quantity < 0) {
+            throw new IllegalArgumentException("Quantity must be non-negative");
+        }
+    }
+
+    private void validatePublicationDate(LocalDate publicationDate) {
+        if (publicationDate != null && publicationDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("Publication date cannot be in the future");
+        }
     }
 
     private BookResponse toResponse(Book book) {

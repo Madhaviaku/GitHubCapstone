@@ -2,15 +2,11 @@ package com.library.catalog.dto;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PastOrPresent;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 
 public record BookUpdateRequest(
-        @Pattern(regexp = "^(?:\\d{10}|\\d{13}|\\d[\\d-]{8,}\\d)$", message = "Invalid ISBN format")
-        String isbn,
-
         @Size(min = 1, max = 200, message = "Title length must be between 1 and 200 characters")
         String title,
 

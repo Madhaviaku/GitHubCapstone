@@ -48,12 +48,12 @@ The Library Book Management System is a web application that allows Library Admi
 - **Output:** BookDTO or 404 Not Found
 - **Constraints:** ISBN must be valid format
 
-#### FR1.4 Search Books by Title
-- **Description:** Search for books using partial or full title matching
-- **Input:** Search title (string), Page number, Page size (optional)
-- **Process:** Case-insensitive search in title field, return paginated results
+#### FR1.4 Search Books by Catalog Query
+- **Description:** Search for books using partial or full matching across title, author, genre, and ISBN fields
+- **Input:** Search query string, Page number, Page size (optional)
+- **Process:** Normalize the query, perform case-insensitive matching across the searchable fields, and return paginated results
 - **Output:** Paginated list of matching books or empty list
-- **Constraints:** Supports partial matches (e.g., "Java" matches "Java Programming")
+- **Constraints:** Supports partial matches (e.g., "Java" matches "Java Programming", "bloch" matches "Joshua Bloch", "tech" matches a Technology genre, and "9783" matches a matching ISBN) and preserves the current API response schema
 
 #### FR1.5 Update Book
 - **Description:** Library Administrator can modify book information

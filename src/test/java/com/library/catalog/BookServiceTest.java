@@ -72,6 +72,22 @@ class BookServiceTest {
     }
 
     @Test
+    void createBookDefaultsMissingQuantityToZero() {
+        BookCreateRequest request = new BookCreateRequest(
+                "1234567890", "A Book", "An Author", null, null, "Fiction", null);
+        when(bookRepository.existsByIsbn("1234567890")).thenReturn(false);
+        when(bookRepository.save(any(Book.class))).thenAnswer(invocation -> {
+            Book saved = invocation.getArgument(0);
+            saved.setId(2L);
+            return saved;
+        });
+
+        var created = bookService.createBook(request);
+
+        assertEquals(0, created.quantityAvailable());
+    }
+
+    @Test
     void getBookShouldFailWhenMissing() {
         when(bookRepository.findByIsbn("9783161484100")).thenReturn(java.util.Optional.empty());
 
@@ -92,10 +108,26 @@ class BookServiceTest {
                 null,
                 null,
                 null,
-                null,
                 -1
         );
 
         assertThrows(IllegalArgumentException.class, () -> bookService.updateBook("9783161484100", request));
+    }
+
+    @Test
+    void updateBookDoesNotChangeIsbn() {
+        Book existing = new Book("9783161484100", "Effective Java", "Joshua Bloch", null,
+                null, "Programming", 5);
+        existing.setId(1L);
+        when(bookRepository.findByIsbn("9783161484100")).thenReturn(java.util.Optional.of(existing));
+        when(bookRepository.save(any(Book.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BookUpdateRequest request = new BookUpdateRequest(
+                "Updated Title", null, null, null, null, null);
+
+        var updated = bookService.updateBook("9783161484100", request);
+
+        assertEquals("9783161484100", updated.isbn());
+        assertEquals("Updated Title", updated.title());
     }
 }
